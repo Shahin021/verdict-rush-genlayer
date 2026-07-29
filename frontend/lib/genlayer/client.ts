@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { createClient } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
@@ -304,6 +304,7 @@ export function createGenLayerClient(address?: string) {
 
   if (address) {
     config.account = address as `0x${string}`;
+    config.provider = getEthereumProvider();
   }
 
   try {
@@ -325,3 +326,4 @@ export async function getClient() {
   const address = accounts[0];
   return createGenLayerClient(address);
 }
+

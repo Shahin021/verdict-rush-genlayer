@@ -1,6 +1,12 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
+import { TransactionStatus } from "genlayer-js/types";
+import {
+  connectMetaMask,
+  createGenLayerClient,
+  getContractAddress,
+} from "@/lib/genlayer/client";
 
 type Screen = "home" | "lobby" | "game" | "results";
 
@@ -82,7 +88,10 @@ export default function HomePage() {
 
   function prepareRoom(code: string) {
     const name = playerName.trim() || "Player 1";
-    const initialPlayers = [name, "Nova", "Kaito"];
+    const demoPlayers = DEMO_NAMES.filter(
+      (demoName) => demoName.toLowerCase() !== name.toLowerCase(),
+    ).slice(0, 2);
+    const initialPlayers = [name, ...demoPlayers];
 
     setActivePlayer(name);
     setRoomCode(code);
@@ -135,7 +144,7 @@ export default function HomePage() {
     setScreen("game");
   }
 
-  function submitAnswer() {
+  async function submitAnswer() {
     if (!answer.trim() || judging) {
       setMessage("Write an answer before submitting.");
       return;
@@ -144,37 +153,102 @@ export default function HomePage() {
     setMessage("");
     setJudging(true);
 
-    window.setTimeout(() => {
-      const playerRoundScore = calculateLocalScore(answer, roundIndex);
+    try {
+      const contractAddress = getContractAddress();
+
+      if (!contractAddress) {
+        throw new Error("Contract address is missing from frontend/.env.local");
+      }
+
+      const walletAddress = await connectMetaMask();
+      const writeClient = createGenLayerClient(walletAddress);
+      const readClient = createGenLayerClient();
+
+      await writeClient.connect("studionet");
+
+      const demoAnswers = [
+        "Give me the seat because I will use every remaining minute to help the whole crew survive.",
+        "This invention looks useless until the moment humanity needs a simple idea that nobody else considered.",
+        "Humans do not only need correct answers; they need to feel understood before they can trust an answer.",
+        "The strongest response is the one that stays relevant, clear and original under pressure.",
+        "A good decision protects the group while still recognizing the individual behind the request.",
+      ];
+
+      const submissions = players.map((player, playerIndex) => ({
+        player_id: player,
+        answer:
+          player === activePlayer
+            ? answer.trim()
+            : demoAnswers[playerIndex % demoAnswers.length],
+      }));
+
+      setMessage("Transaction submitted. GenLayer validators are judging...");
+
+      const txHash = await writeClient.writeContract({
+        address: contractAddress as `0x${string}`,
+        functionName: "judge_round_batch",
+        args: [
+          roomCode,
+          roundIndex + 1,
+          1,
+          `${currentPrompt.prompt}\nRule: ${currentPrompt.rule}`,
+          JSON.stringify(submissions),
+        ],
+        value: BigInt(0),
+      });
+
+      await readClient.waitForTransactionReceipt({
+        hash: txHash,
+        status: TransactionStatus.ACCEPTED,
+        interval: 3000,
+        retries: 120,
+      });
+
+      const verdictResult = await readClient.readContract({
+        address: contractAddress as `0x${string}`,
+        functionName: "get_batch_verdict",
+        args: [roomCode, roundIndex + 1, 1],
+      });
+
+      const verdictText = String(verdictResult);
+
+      if (!verdictText) {
+        throw new Error("The contract finalized without returning a verdict.");
+      }
+
+      const verdict = JSON.parse(verdictText) as {
+        ranking: Array<{
+          player_id: string;
+          score: number;
+        }>;
+      };
 
       setScores((current) => {
         const updated = { ...current };
 
-        players.forEach((player, playerIndex) => {
-          if (player === activePlayer) {
-            updated[player] = (updated[player] ?? 0) + playerRoundScore;
-            return;
-          }
-
-          const simulatedScore =
-            61 +
-            ((roundIndex + 1) * 9 + playerIndex * 7 + player.length) % 31;
-
-          updated[player] = (updated[player] ?? 0) + simulatedScore;
+        verdict.ranking.forEach((entry) => {
+          updated[entry.player_id] =
+            (updated[entry.player_id] ?? 0) + Number(entry.score);
         });
 
         return updated;
       });
 
-      setJudging(false);
       setAnswer("");
+      setMessage("");
 
       if (roundIndex === WEEKLY_PROMPTS.length - 1) {
         setScreen("results");
       } else {
         setRoundIndex((current) => current + 1);
       }
-    }, 1400);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Contract transaction failed.";
+      setMessage(errorMessage);
+    } finally {
+      setJudging(false);
+    }
   }
 
   function copyRoomCode() {
@@ -605,9 +679,8 @@ export default function HomePage() {
                   </div>
 
                   <p className="mt-4 text-xs leading-5 text-white/30">
-                    Current scoring is a local MVP preview. The production
-                    verdict will be written by the GenLayer Intelligent
-                    Contract.
+                    Scores are produced by the deployed GenLayer Intelligent Contract
+                    and finalized through validator consensus.
                   </p>
                 </div>
               </aside>
@@ -697,9 +770,8 @@ export default function HomePage() {
             </div>
 
             <div className="mt-8 rounded-2xl border border-purple-400/20 bg-purple-500/[0.06] p-5 text-center text-sm leading-6 text-white/55">
-              The next development step connects answer evaluation and final
-              ranking to a GenLayer Intelligent Contract using Optimistic
-              Democracy.
+              Answer evaluation and final ranking are written by the deployed
+              GenLayer Intelligent Contract using Optimistic Democracy.
             </div>
           </div>
         )}
