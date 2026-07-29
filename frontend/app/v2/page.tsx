@@ -841,8 +841,22 @@ export default function VerdictRushV2Page() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(126,34,206,0.18),transparent_32%),radial-gradient(circle_at_85%_85%,rgba(249,115,22,0.10),transparent_30%),linear-gradient(145deg,#050507_0%,#090811_48%,#050507_100%)] text-white">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+    <main
+      className="min-h-screen bg-[radial-gradient(circle_at_20%_10%,rgba(126,34,206,0.18),transparent_32%),radial-gradient(circle_at_85%_85%,rgba(249,115,22,0.10),transparent_30%),linear-gradient(145deg,#050507_0%,#090811_48%,#050507_100%)] text-white"
+      style={
+        screen === "home"
+          ? {
+              backgroundImage:
+                'linear-gradient(rgba(3, 2, 10, 0.45), rgba(3, 2, 10, 0.72)), url("/verdict-rush-bg.png")',
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
+              backgroundAttachment: "fixed",
+            }
+          : undefined
+      }
+    >
+<div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute left-[-170px] top-[-170px] h-[430px] w-[430px] rounded-full bg-purple-700/20 blur-[130px]" />
         <div className="absolute bottom-[-180px] right-[-120px] h-[440px] w-[440px] rounded-full bg-orange-500/10 blur-[130px]" />
       </div>
