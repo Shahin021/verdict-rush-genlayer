@@ -141,3 +141,71 @@ For detailed information, see our [documentation](https://docs.genlayer.com/).
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+
+## Verdict Rush V2 — Game Builder
+
+V2 turns Verdict Rush from one fixed writing game into a configurable
+"Predict the Consensus" platform.
+
+### V2 flow
+
+1. A host chooses a display name and creates a game.
+2. The host selects 3–12 subjective questions, four options per question,
+   the judging criterion and the timer (10–60 seconds).
+3. The GenLayer Intelligent Contract ranks all four options for every
+   question through Optimistic Democracy.
+4. Players answer quickly without needing a wallet.
+5. The host or relayer submits each player's complete answer set in one
+   final batch transaction.
+6. The contract calculates deterministic rank points, speed bonuses and
+   the final leaderboard from the consensus verdict.
+
+### Identity model
+
+Wallet, Discord, email and guest identities are kept separate from the
+public display name. Only the display name is shown in the room and
+leaderboard. The current V2 prototype includes the identity-selection
+and display-name layer; production Discord/email OAuth requires provider
+credentials during deployment.
+
+### V2 files
+
+- `contracts/verdict_rush_v2.py`
+- `frontend/app/v2/page.tsx`
+
+### V2 environment variable
+
+```env
+NEXT_PUBLIC_VERDICT_RUSH_V2_CONTRACT_ADDRESS=<deployed-v2-address>
+```
+
+
+## Verdict Rush V3 — Real Rooms and Gasless Play
+
+V3 completes the multiplayer flow:
+
+- A host creates 3–12 subjective four-option questions and a 10–60 second timer.
+- A dedicated server-side GenLayer relayer publishes the game, so the host does not sign a wallet transaction.
+- The contract creates a persistent room with a shareable room URL.
+- Up to 25 authenticated or guest players join the same room.
+- The host starts the room and every client follows the shared on-chain room state.
+- Each player submits one final answer set through the relayer.
+- The Intelligent Contract calculates rank points and speed bonuses, then stores a live room leaderboard.
+
+### V3 environment variables
+
+```env
+NEXT_PUBLIC_VERDICT_RUSH_V3_CONTRACT_ADDRESS=<deployed-v3-address>
+VERDICT_RUSH_V3_CONTRACT_ADDRESS=<deployed-v3-address>
+GENLAYER_RELAYER_PRIVATE_KEY=<fresh-dedicated-relayer-private-key>
+```
+
+`GENLAYER_RELAYER_PRIVATE_KEY` must belong to a fresh dedicated development wallet. Never use a personal wallet or commit this value to Git.
+
+### V3 files
+
+- `contracts/verdict_rush_v3.py`
+- `frontend/app/api/v2/relay/route.ts`
+- `frontend/app/v2/page.tsx`
+

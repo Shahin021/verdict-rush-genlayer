@@ -10,10 +10,15 @@ import {
 import { localnet } from "genlayer-js/chains";
 
 export default async function main(client: GenLayerClient<any>) {
-  const filePath = path.resolve(process.cwd(), "contracts/verdict_rush.py");
+  const filePath = path.resolve(
+    process.cwd(),
+    "contracts/verdict_rush_v3.py",
+  );
 
   try {
-    const contractCode = new Uint8Array(readFileSync(filePath));
+    const contractCode = new Uint8Array(
+      readFileSync(filePath),
+    );
 
     await client.initializeConsensusSmartContract();
 
@@ -34,16 +39,23 @@ export default async function main(client: GenLayerClient<any>) {
       receipt.statusName !== "ACCEPTED" &&
       receipt.statusName !== "FINALIZED"
     ) {
-      throw new Error(`Deployment failed. Receipt: ${JSON.stringify(receipt)}`);
+      throw new Error(
+        `Deployment failed. Receipt: ${JSON.stringify(
+          receipt,
+        )}`,
+      );
     }
 
     const deployedContractAddress =
       (client.chain as GenLayerChain).id === localnet.id
         ? receipt.data.contract_address
-        : (receipt.txDataDecoded as DecodedDeployData)?.contractAddress;
+        : (receipt.txDataDecoded as DecodedDeployData)
+            ?.contractAddress;
 
-    console.log(`Contract deployed at address: ${deployedContractAddress}`);
+    console.log(
+      `Contract deployed at address: ${deployedContractAddress}`,
+    );
   } catch (error) {
-    throw new Error(`Error during deployment:, ${error}`);
+    throw new Error(`Error during deployment: ${error}`);
   }
 }

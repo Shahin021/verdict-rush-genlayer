@@ -26,3 +26,5 @@ package-lock.json
 frontend/.env.local
 frontend/*.bak
 frontend/*.tsbuildinfo
+*.zip
+frontend/**/*.backup
