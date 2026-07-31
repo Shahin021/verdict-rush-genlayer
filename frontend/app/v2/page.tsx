@@ -362,20 +362,26 @@ export default function VerdictRushV2Page() {
     [contractAddress],
   );
 
-  const refreshRoom = useCallback(async () => {
-    if (!roomId) return null;
+  const refreshRoom = useCallback(
+    async (showError = true) => {
+      if (!roomId) return null;
 
-    try {
-      return await loadRoom(roomId);
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Room refresh failed.",
-      );
-      return null;
-    }
-  }, [loadRoom, roomId]);
+      try {
+        return await loadRoom(roomId);
+      } catch (error) {
+        if (showError) {
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "Room refresh failed.",
+          );
+        }
+
+        return null;
+      }
+    },
+    [loadRoom, roomId],
+  );
 
   const beginGame = useCallback(() => {
     setQuestionIndex(0);
@@ -417,7 +423,7 @@ export default function VerdictRushV2Page() {
 
     const poll = window.setInterval(() => {
       void (async () => {
-        const nextRoom = await refreshRoom();
+        const nextRoom = await refreshRoom(false);
 
         if (
           nextRoom?.status === "started" &&
