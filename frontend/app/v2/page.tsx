@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { getAccessToken } from "@privy-io/react-auth";
 import { TransactionHash, TransactionStatus } from "genlayer-js/types";
 import { createGenLayerClient } from "@/lib/genlayer/client";
 
@@ -28,7 +29,6 @@ type Question = {
 
 type PlayerAnswer = {
   choice: number;
-  time_ms: number;
 };
 
 type VerdictQuestion = {
@@ -257,9 +257,16 @@ export default function VerdictRushV2Page() {
       action: string,
       payload: Record<string, unknown>,
     ): Promise<`0x${string}`> => {
+      const accessToken = await getAccessToken();
+
+      if (!accessToken) {
+        throw new Error("Your Privy session is missing or expired.");
+      }
+
       const response = await fetch("/api/v2/relay", {
         method: "POST",
         headers: {
+          authorization: `Bearer ${accessToken}`,
           "content-type": "application/json",
         },
         body: JSON.stringify({
@@ -752,16 +759,8 @@ export default function VerdictRushV2Page() {
     setLocked(true);
     setSelectedChoice(choice);
 
-    const elapsed = Math.min(
-      secondsPerQuestion * 1000,
-      Date.now() - questionStartedAt.current,
-    );
-    const finalAnswer = {
+    const finalAnswer: PlayerAnswer = {
       choice,
-      time_ms:
-        choice === -1
-          ? secondsPerQuestion * 1000
-          : elapsed,
     };
     const nextAnswers = [...answers, finalAnswer];
 

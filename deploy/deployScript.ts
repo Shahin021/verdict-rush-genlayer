@@ -7,7 +7,7 @@ import {
   DecodedDeployData,
   GenLayerChain,
 } from "genlayer-js/types";
-import { localnet } from "genlayer-js/chains";
+import { testnetBradbury } from "genlayer-js/chains";
 
 export default async function main(client: GenLayerClient<any>) {
   const filePath = path.resolve(
@@ -24,7 +24,7 @@ export default async function main(client: GenLayerClient<any>) {
 
     const deployTransaction = await client.deployContract({
       code: contractCode,
-      args: [],
+      args: ["0xf3757410Cf22baE4Ca14c2D19882729104b6A023"],
     });
 
     const receipt = await client.waitForTransactionReceipt({
@@ -47,7 +47,7 @@ export default async function main(client: GenLayerClient<any>) {
     }
 
     const deployedContractAddress =
-      (client.chain as GenLayerChain).id === localnet.id
+      (client.chain as GenLayerChain).id !== testnetBradbury.id
         ? receipt.data.contract_address
         : (receipt.txDataDecoded as DecodedDeployData)
             ?.contractAddress;
