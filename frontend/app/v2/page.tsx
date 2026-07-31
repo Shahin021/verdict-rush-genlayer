@@ -892,6 +892,9 @@ export default function VerdictRushV2Page() {
               <div className="mx-auto mt-10 grid max-w-3xl gap-4 md:grid-cols-2">
                 <button
                   onClick={() => {
+                    window.history.replaceState({}, "", "/v2");
+                    joinAttempted.current = false;
+                    setJoinRoomId("");
                     setMessage("");
                     setScreen("builder");
                   }}
