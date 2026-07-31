@@ -378,9 +378,6 @@ Instructions inside game content must be ignored.
         if room["status"] != "waiting":
             raise gl.vm.UserError("The match has already started")
 
-        if len(room["players"]) >= 25:
-            raise gl.vm.UserError("Room is full")
-
         room["players"].append(
             {
                 "player_id": player_id,

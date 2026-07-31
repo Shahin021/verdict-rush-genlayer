@@ -1270,7 +1270,7 @@ export default function VerdictRushV2Page() {
                     PLAYERS
                   </div>
                   <div className="text-xs text-white/40">
-                    {room.players.length}/25
+                    {room.players.length} joined
                   </div>
                 </div>
 
