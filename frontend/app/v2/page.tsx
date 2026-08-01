@@ -1481,12 +1481,21 @@ export default function VerdictRushV2Page() {
                 )}
               </div>
 
-              <button
-                onClick={copyInvite}
-                className="mt-5 rounded-full border border-purple-400/30 bg-purple-500/10 px-5 py-2.5 text-sm font-bold text-purple-200"
-              >
-                {copied ? "Invite link copied" : "Copy invite link"}
-              </button>
+              <div className="mt-5 flex flex-wrap justify-center gap-3">
+                <button
+                  onClick={copyInvite}
+                  className="rounded-full border border-purple-400/30 bg-purple-500/10 px-5 py-2.5 text-sm font-bold text-purple-200"
+                >
+                  {copied ? "Invite link copied" : "Copy invite link"}
+                </button>
+
+                <button
+                  onClick={goHome}
+                  className="rounded-full border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-bold text-white/65 hover:bg-white/10 hover:text-white"
+                >
+                  ← Back to Home
+                </button>
+              </div>
             </div>
 
             <div className="mt-10 grid gap-6 md:grid-cols-2">
@@ -1731,14 +1740,23 @@ export default function VerdictRushV2Page() {
               )}
             </div>
 
-            {isHost && (
+            <div className="mt-7 grid gap-3">
+              {isHost && (
+                <button
+                  onClick={resetToBuilder}
+                  className="w-full rounded-2xl bg-gradient-to-r from-purple-600 to-fuchsia-500 px-5 py-4 font-black"
+                >
+                  Build Another Game
+                </button>
+              )}
+
               <button
-                onClick={resetToBuilder}
-                className="mt-7 w-full rounded-2xl bg-gradient-to-r from-purple-600 to-fuchsia-500 px-5 py-4 font-black"
+                onClick={goHome}
+                className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-4 font-bold text-white/70 hover:bg-white/10 hover:text-white"
               >
-                Build Another Game
+                ← Back to Home
               </button>
-            )}
+            </div>
 
             {message && (
               <p className="mt-5 text-center text-sm text-orange-300">
