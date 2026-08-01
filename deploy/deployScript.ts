@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+﻿import { readFileSync } from "fs";
 import path from "path";
 import {
   TransactionHash,
@@ -12,7 +12,7 @@ import { testnetBradbury } from "genlayer-js/chains";
 export default async function main(client: GenLayerClient<any>) {
   const filePath = path.resolve(
     process.cwd(),
-    "contracts/verdict_rush_v3.py",
+    "contracts/verdict_rush_v4.py",
   );
 
   try {
@@ -59,3 +59,4 @@ export default async function main(client: GenLayerClient<any>) {
     throw new Error(`Error during deployment: ${error}`);
   }
 }
+

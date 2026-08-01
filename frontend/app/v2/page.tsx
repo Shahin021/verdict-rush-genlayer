@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   useCallback,
@@ -7,9 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { getAccessToken } from "@privy-io/react-auth";
-import { TransactionHash, TransactionStatus } from "genlayer-js/types";
-import { createGenLayerClient } from "@/lib/genlayer/client";
+import { getAccessToken, usePrivy } from "@privy-io/react-auth";
 
 type Screen =
   | "home"
@@ -46,6 +44,7 @@ type ScoredPlayer = {
   player_id: string;
   display_name: string;
   score: number;
+  submitted?: boolean;
 };
 
 type RoomPlayer = {
@@ -65,6 +64,9 @@ type RoomState = {
   submitted_count: number;
   created_at: number;
   started_at: number;
+  ends_at: number;
+  submission_deadline: number;
+  finished_at: number;
   is_private: boolean;
 };
 
@@ -126,17 +128,12 @@ function emptyQuestion(): Question {
   };
 }
 
-function parseJson<T>(value: unknown, label: string): T {
-  const text = String(value);
-
-  if (!text) {
-    throw new Error(`${label} was not found.`);
-  }
-
-  return JSON.parse(text) as T;
-}
-
 export default function VerdictRushV2Page() {
+  const {
+    ready: privyReady,
+    authenticated,
+    user,
+  } = usePrivy();
   const [screen, setScreen] = useState<Screen>("home");
   const [displayName, setDisplayName] = useState("");
   const [playerId, setPlayerId] = useState("");
@@ -151,7 +148,7 @@ export default function VerdictRushV2Page() {
   const [questions, setQuestions] =
     useState<Question[]>(DEFAULT_QUESTIONS);
 
-  const [gameId, setGameId] = useState("");
+  const [, setGameId] = useState("");
   const [roomId, setRoomId] = useState("");
   const [roomMode, setRoomMode] = useState<"public" | "private">("public");
   const [accessCode, setAccessCode] = useState("");
@@ -169,19 +166,67 @@ export default function VerdictRushV2Page() {
   const [locked, setLocked] = useState(false);
   const [selectedChoice, setSelectedChoice] =
     useState<number | null>(null);
-  const [answers, setAnswers] = useState<PlayerAnswer[]>([]);
-
-  const questionStartedAt = useRef(Date.now());
+  const answersRef = useRef<Array<PlayerAnswer | null>>([]);
+  const questionCountRef = useRef(DEFAULT_QUESTIONS.length);
+  const serverOffsetMsRef = useRef(0);
   const joinAttempted = useRef(false);
-
-  const contractAddress =
-    process.env.NEXT_PUBLIC_VERDICT_RUSH_V3_CONTRACT_ADDRESS ||
-    "";
+  const submissionStartedRef = useRef(false);
+  const finalizationStartedRef = useRef(false);
 
   const isHost =
     Boolean(room) && room?.host_player_id === playerId;
   const currentQuestion = questions[questionIndex];
-  const leaderboard = room?.leaderboard ?? [];
+
+  const leaderboard = useMemo(() => {
+    if (!room) {
+      return [];
+    }
+
+    const scores = new Map(
+      room.leaderboard.map((player) => [
+        player.player_id,
+        player,
+      ]),
+    );
+
+    return room.players
+      .map((player) => {
+        const scored = scores.get(player.player_id);
+
+        return (
+          scored ?? {
+            player_id: player.player_id,
+            display_name: player.display_name,
+            score: 0,
+            submitted: false,
+          }
+        );
+      })
+      .sort((left, right) => {
+        const leftSubmitted = left.submitted !== false;
+        const rightSubmitted = right.submitted !== false;
+
+        if (leftSubmitted !== rightSubmitted) {
+          return leftSubmitted ? -1 : 1;
+        }
+
+        if (left.score !== right.score) {
+          return right.score - left.score;
+        }
+
+        return left.display_name.localeCompare(
+          right.display_name,
+        );
+      });
+  }, [room]);
+
+  const submittedPlayers = useMemo(
+    () =>
+      room?.leaderboard.filter(
+        (player) => player.submitted !== false,
+      ).length ?? 0,
+    [room],
+  );
 
   const progress = useMemo(
     () => ((questionIndex + 1) / questions.length) * 100,
@@ -197,8 +242,11 @@ export default function VerdictRushV2Page() {
   }, [roomId]);
 
   useEffect(() => {
-    function syncIdentity() {
-      const id = window.localStorage.getItem("vr_auth_id") ?? "";
+    if (!privyReady) {
+      return;
+    }
+
+    function syncProfileName() {
       const rawProfile = window.localStorage.getItem(
         "vr_profile_current",
       );
@@ -220,34 +268,73 @@ export default function VerdictRushV2Page() {
         }
       }
 
-      setPlayerId(id);
       setDisplayName(name || "Player");
-      setIdentityReady(Boolean(id));
     }
 
-    syncIdentity();
+    syncProfileName();
+
     window.addEventListener(
       "vr-profile-updated",
-      syncIdentity,
+      syncProfileName,
     );
+
+    if (!authenticated || !user?.id) {
+      window.localStorage.removeItem("vr_auth_id");
+      setPlayerId("");
+      setIdentityReady(false);
+    } else {
+      window.localStorage.setItem("vr_auth_id", user.id);
+      setPlayerId(user.id);
+      setIdentityReady(true);
+    }
 
     return () =>
       window.removeEventListener(
         "vr-profile-updated",
-        syncIdentity,
+        syncProfileName,
       );
-  }, []);
+  }, [authenticated, privyReady, user?.id]);
 
   const waitForAccepted = useCallback(
     async (txHash: `0x${string}`) => {
-      const readClient = createGenLayerClient();
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        const response = await fetch(
+          `/api/v2/tx-status?hash=${encodeURIComponent(txHash)}`,
+          {
+            cache: "no-store",
+          },
+        );
 
-      await readClient.waitForTransactionReceipt({
-        hash: txHash as TransactionHash,
-        status: TransactionStatus.ACCEPTED,
-        interval: 3000,
-        retries: 200,
-      });
+        const data = (await response.json()) as {
+          accepted?: boolean;
+          failed?: boolean;
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(
+            data.error || "Transaction status check failed.",
+          );
+        }
+
+        if (data.failed) {
+          throw new Error(
+            data.error || "The GenLayer transaction failed.",
+          );
+        }
+
+        if (data.accepted) {
+          return;
+        }
+
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, 3000),
+        );
+      }
+
+      throw new Error(
+        "The GenLayer transaction did not finish in time.",
+      );
     },
     [],
   );
@@ -293,47 +380,44 @@ export default function VerdictRushV2Page() {
 
   const loadRoom = useCallback(
     async (targetRoomId: string) => {
-      if (!contractAddress) {
+      const normalizedRoomId = targetRoomId.trim().toUpperCase();
+      const requestedAt = Date.now();
+      const response = await fetch(
+        `/api/v2/state?roomId=${encodeURIComponent(normalizedRoomId)}`,
+        {
+          cache: "no-store",
+        },
+      );
+      const receivedAt = Date.now();
+
+      const data = (await response.json()) as {
+        room?: RoomState;
+        config?: GameConfig;
+        verdict?: GameVerdict;
+        serverTimeMs?: number;
+        error?: string;
+      };
+
+      if (
+        !response.ok ||
+        !data.room ||
+        !data.config ||
+        !data.verdict ||
+        typeof data.serverTimeMs !== "number"
+      ) {
         throw new Error(
-          "NEXT_PUBLIC_VERDICT_RUSH_V3_CONTRACT_ADDRESS is missing.",
+          data.error || "Room state could not be loaded.",
         );
       }
 
-      const readClient = createGenLayerClient();
-      const normalizedRoomId = targetRoomId.trim().toUpperCase();
+      const nextRoom = data.room;
+      const config = data.config;
+      const nextVerdict = data.verdict;
 
-      const roomRaw = await readClient.readContract({
-        address: contractAddress as `0x${string}`,
-        functionName: "get_room",
-        args: [normalizedRoomId],
-      });
-
-      const nextRoom = parseJson<RoomState>(
-        roomRaw,
-        "Room",
-      );
-
-      const [configRaw, verdictRaw] = await Promise.all([
-        readClient.readContract({
-          address: contractAddress as `0x${string}`,
-          functionName: "get_game_config",
-          args: [nextRoom.game_id],
-        }),
-        readClient.readContract({
-          address: contractAddress as `0x${string}`,
-          functionName: "get_game_verdict",
-          args: [nextRoom.game_id],
-        }),
-      ]);
-
-      const config = parseJson<GameConfig>(
-        configRaw,
-        "Game configuration",
-      );
-      const nextVerdict = parseJson<GameVerdict>(
-        verdictRaw,
-        "Consensus verdict",
-      );
+      serverOffsetMsRef.current =
+        data.serverTimeMs -
+        Math.floor((requestedAt + receivedAt) / 2);
+      questionCountRef.current = config.questions.length;
 
       setRoomId(nextRoom.room_id);
       setGameId(nextRoom.game_id);
@@ -359,7 +443,7 @@ export default function VerdictRushV2Page() {
 
       return nextRoom;
     },
-    [contractAddress],
+    [],
   );
 
   const refreshRoom = useCallback(
@@ -384,8 +468,13 @@ export default function VerdictRushV2Page() {
   );
 
   const beginGame = useCallback(() => {
+    answersRef.current = Array.from(
+      { length: questionCountRef.current },
+      () => null as PlayerAnswer | null,
+    );
+    submissionStartedRef.current = false;
+    finalizationStartedRef.current = false;
     setQuestionIndex(0);
-    setAnswers([]);
     setLocked(false);
     setSelectedChoice(null);
     setTimeLeft(secondsPerQuestion);
@@ -413,63 +502,193 @@ export default function VerdictRushV2Page() {
     void joinRequestedRoom(normalizedRoomId, "");
   }, [identityReady]);
 
+  const requestRoomFinalization = useCallback(
+    async (targetRoom: RoomState) => {
+      if (
+        targetRoom.status !== "started" ||
+        targetRoom.submission_deadline <= 0 ||
+        finalizationStartedRef.current
+      ) {
+        return;
+      }
+
+      const serverNowSeconds = Math.floor(
+        (Date.now() + serverOffsetMsRef.current) / 1000,
+      );
+
+      if (serverNowSeconds < targetRoom.submission_deadline) {
+        return;
+      }
+
+      finalizationStartedRef.current = true;
+
+      try {
+        const txHash = await relay("finalize_room", {
+          roomId: targetRoom.room_id,
+        });
+
+        await waitForAccepted(txHash);
+        const finalizedRoom = await loadRoom(
+          targetRoom.room_id,
+        );
+
+        if (finalizedRoom.status === "finished") {
+          setMessage("");
+          setScreen("results");
+        }
+      } catch {
+        finalizationStartedRef.current = false;
+      }
+    },
+    [loadRoom, relay, waitForAccepted],
+  );
+
   useEffect(() => {
     if (
       !roomId ||
-      (screen !== "lobby" && screen !== "results")
+      !["lobby", "game", "scoring", "results"].includes(
+        screen,
+      )
     ) {
       return;
     }
 
-    const poll = window.setInterval(() => {
-      void (async () => {
-        const nextRoom = await refreshRoom(false);
+    const pollRoom = async () => {
+      const nextRoom = await refreshRoom(false);
 
-        if (
-          nextRoom?.status === "started" &&
-          screen === "lobby"
-        ) {
-          beginGame();
-        }
-      })();
-    }, 3000);
+      if (!nextRoom) {
+        return;
+      }
+
+      if (
+        nextRoom.status === "started" &&
+        screen === "lobby"
+      ) {
+        beginGame();
+        return;
+      }
+
+      if (nextRoom.status === "finished") {
+        setMessage("");
+        setScreen("results");
+        return;
+      }
+
+      if (screen === "results") {
+        await requestRoomFinalization(nextRoom);
+      }
+    };
+
+    void pollRoom();
+    const poll = window.setInterval(() => {
+      void pollRoom();
+    }, 2000);
 
     return () => window.clearInterval(poll);
-  }, [beginGame, refreshRoom, roomId, screen]);
+  }, [
+    beginGame,
+    refreshRoom,
+    requestRoomFinalization,
+    roomId,
+    screen,
+  ]);
 
   useEffect(() => {
-    if (screen !== "game" || locked) {
+    if (
+      screen !== "game" ||
+      !room ||
+      room.status !== "started" ||
+      room.started_at <= 0 ||
+      questions.length === 0
+    ) {
       return;
     }
 
-    questionStartedAt.current = Date.now();
-    setTimeLeft(secondsPerQuestion);
-
-    const timer = window.setInterval(() => {
-      const elapsed =
-        Date.now() - questionStartedAt.current;
-      const remaining = Math.max(
+    const tick = () => {
+      const now =
+        Date.now() + serverOffsetMsRef.current;
+      const questionDurationMs =
+        secondsPerQuestion * 1000;
+      const matchStartedAtMs =
+        room.started_at * 1000;
+      const elapsedMs = Math.max(
         0,
-        secondsPerQuestion -
-          Math.floor(elapsed / 1000),
+        now - matchStartedAtMs,
+      );
+      const nextQuestionIndex = Math.floor(
+        elapsedMs / questionDurationMs,
       );
 
+      if (nextQuestionIndex >= questions.length) {
+        const finalAnswers = Array.from(
+          { length: questions.length },
+          (_, index) =>
+            answersRef.current[index] ?? {
+              choice: -1,
+            },
+        );
+
+        answersRef.current = finalAnswers;
+        setTimeLeft(0);
+        setLocked(true);
+        setSelectedChoice(null);
+
+        if (!submissionStartedRef.current) {
+          submissionStartedRef.current = true;
+          void finalizeMatch(finalAnswers);
+        }
+
+        return;
+      }
+
+      const questionDeadlineMs =
+        matchStartedAtMs +
+        (nextQuestionIndex + 1) *
+          questionDurationMs;
+      const remaining = Math.min(
+        secondsPerQuestion,
+        Math.max(
+          0,
+          Math.ceil((questionDeadlineMs - now) / 1000),
+        ),
+      );
+
+      setQuestionIndex(nextQuestionIndex);
       setTimeLeft(remaining);
 
-      if (elapsed >= secondsPerQuestion * 1000) {
-        window.clearInterval(timer);
-        chooseOption(-1);
+      const nextAnswers = Array.from(
+        { length: questions.length },
+        (_, index) => answersRef.current[index] ?? null,
+      );
+
+      for (
+        let index = 0;
+        index < nextQuestionIndex;
+        index += 1
+      ) {
+        if (nextAnswers[index] === null) {
+          nextAnswers[index] = { choice: -1 };
+        }
       }
-    }, 200);
+
+      answersRef.current = nextAnswers;
+      const currentAnswer =
+        nextAnswers[nextQuestionIndex] ?? null;
+      setSelectedChoice(
+        currentAnswer?.choice ?? null,
+      );
+      setLocked(currentAnswer !== null);
+    };
+
+    tick();
+    const timer = window.setInterval(tick, 200);
 
     return () => window.clearInterval(timer);
-    // chooseOption is driven by the active question state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    room,
     screen,
-    questionIndex,
-    locked,
     secondsPerQuestion,
+    questions.length,
   ]);
 
   function updateQuestionText(
@@ -528,10 +747,6 @@ export default function VerdictRushV2Page() {
   function validateBuilder() {
     if (!identityReady) {
       return "Your sign-in session is not ready.";
-    }
-
-    if (!contractAddress) {
-      return "Deploy VerdictRushV3 and add its address to .env.local.";
     }
 
     if (!title.trim() || !criterion.trim()) {
@@ -680,17 +895,6 @@ export default function VerdictRushV2Page() {
       );
       await waitForAccepted(gameTxHash);
 
-      const readClient = createGenLayerClient();
-      const verdictRaw = await readClient.readContract({
-        address: contractAddress as `0x${string}`,
-        functionName: "get_game_verdict",
-        args: [nextGameId],
-      });
-      const nextVerdict = parseJson<GameVerdict>(
-        verdictRaw,
-        "Consensus verdict",
-      );
-
       setMessage("Creating the multiplayer room...");
 
       const roomTxHash = await relay("create_room", {
@@ -706,8 +910,6 @@ export default function VerdictRushV2Page() {
 
       setGameId(nextGameId);
       setRoomId(nextRoomId);
-      setVerdict(nextVerdict);
-
       if (roomMode === "private") {
         window.localStorage.setItem(
           `vr_room_code_${nextRoomId}`,
@@ -758,30 +960,39 @@ export default function VerdictRushV2Page() {
   }
 
   function chooseOption(choice: number) {
-    if (screen !== "game" || locked) {
+    if (
+      screen !== "game" ||
+      locked ||
+      !room ||
+      room.status !== "started"
+    ) {
       return;
     }
 
+    const now =
+      Date.now() + serverOffsetMsRef.current;
+    const questionDeadlineMs =
+      room.started_at * 1000 +
+      (questionIndex + 1) *
+        secondsPerQuestion *
+        1000;
+
+    if (
+      now >= questionDeadlineMs ||
+      answersRef.current[questionIndex] !== null
+    ) {
+      return;
+    }
+
+    const nextAnswers = Array.from(
+      { length: questions.length },
+      (_, index) => answersRef.current[index] ?? null,
+    );
+
+    nextAnswers[questionIndex] = { choice };
+    answersRef.current = nextAnswers;
     setLocked(true);
     setSelectedChoice(choice);
-
-    const finalAnswer: PlayerAnswer = {
-      choice,
-    };
-    const nextAnswers = [...answers, finalAnswer];
-
-    setAnswers(nextAnswers);
-
-    window.setTimeout(() => {
-      if (questionIndex === questions.length - 1) {
-        void finalizeMatch(nextAnswers);
-        return;
-      }
-
-      setQuestionIndex((current) => current + 1);
-      setSelectedChoice(null);
-      setLocked(false);
-    }, 2200);
   }
 
   async function finalizeMatch(
@@ -801,8 +1012,16 @@ export default function VerdictRushV2Page() {
       });
 
       await waitForAccepted(txHash);
-      await refreshRoom();
-      setMessage("");
+      const nextRoom = await refreshRoom();
+
+      if (nextRoom?.status === "finished") {
+        setMessage("");
+      } else {
+        setMessage(
+          "Your score is recorded. Waiting for the other players...",
+        );
+      }
+
       setScreen("results");
     } catch (error) {
       setMessage(
@@ -810,7 +1029,7 @@ export default function VerdictRushV2Page() {
           ? error.message
           : "Final scoring failed.",
       );
-      setScreen("lobby");
+      setScreen("results");
     }
   }
 
@@ -830,7 +1049,9 @@ export default function VerdictRushV2Page() {
     setRoomId("");
     setRoom(null);
     setVerdict(null);
-    setAnswers([]);
+    answersRef.current = [];
+    submissionStartedRef.current = false;
+    finalizationStartedRef.current = false;
     setSelectedChoice(null);
     setLocked(false);
     setMessage("");
@@ -1418,7 +1639,7 @@ export default function VerdictRushV2Page() {
                 Consensus Results
               </h1>
               <p className="mt-3 text-white/45">
-                {room.submitted_count}/{room.players.length}{" "}
+                {submittedPlayers}/{room.players.length}{" "}
                 players submitted
               </p>
             </div>
@@ -1461,7 +1682,10 @@ export default function VerdictRushV2Page() {
                       </div>
                     </div>
                     <div className="text-2xl font-black text-orange-300">
-                      {player.score}
+                      {player.submitted === false &&
+                      room.status !== "finished"
+                        ? "Waiting"
+                        : player.score}
                     </div>
                   </div>
                 ))
@@ -1488,3 +1712,4 @@ export default function VerdictRushV2Page() {
     </main>
   );
 }
+

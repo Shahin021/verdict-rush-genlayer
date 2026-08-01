@@ -17,7 +17,6 @@ export default function VerdictRushPrivyProvider({
     <PrivyProvider
       appId={appId}
       config={{
-        loginMethods: ["email", "google", "discord", "wallet"],
         appearance: {
           theme: "dark",
           accentColor: "#a855f7",

@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { PrivyClient } from "@privy-io/node";
 import { NextResponse } from "next/server";
 import { createAccount, createClient } from "genlayer-js";
-import { studionet } from "genlayer-js/chains";
+import { testnetBradbury } from "genlayer-js/chains";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +30,44 @@ class HttpError extends Error {
   }
 }
 
+function isRetryableBackpressure(error: unknown): boolean {
+  const message =
+    error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes(
+      "Node is not currently accepting transactions",
+    ) || message.includes("pipeline backpressure")
+  );
+}
+
+async function writeWithBackpressureRetry<T>(
+  operation: () => Promise<T>,
+  maxAttempts = 3,
+): Promise<T> {
+  for (
+    let attempt = 1;
+    attempt <= maxAttempts;
+    attempt += 1
+  ) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (
+        !isRetryableBackpressure(error) ||
+        attempt === maxAttempts
+      ) {
+        throw error;
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, 1000 * attempt),
+      );
+    }
+  }
+
+  throw new Error("Relayer retry limit reached.");
+}
 function requiredString(
   value: unknown,
   name: string,
@@ -123,8 +161,7 @@ export async function POST(request: Request) {
     const privateKey =
       process.env.GENLAYER_RELAYER_PRIVATE_KEY;
     const contractAddress =
-      process.env.VERDICT_RUSH_V3_CONTRACT_ADDRESS ||
-      process.env.NEXT_PUBLIC_VERDICT_RUSH_V3_CONTRACT_ADDRESS;
+      (process.env.VERDICT_RUSH_V4_CONTRACT_ADDRESS || process.env.NEXT_PUBLIC_VERDICT_RUSH_V4_CONTRACT_ADDRESS || "0x295ab506D7FBe704aE30BC2685396ddf22bA9536").trim();
 
     if (
       !privateKey ||
@@ -141,7 +178,7 @@ export async function POST(request: Request) {
       !/^0x[0-9a-fA-F]{40}$/.test(contractAddress)
     ) {
       throw new HttpError(
-        "VERDICT_RUSH_V3_CONTRACT_ADDRESS is missing or invalid.",
+        "VERDICT_RUSH_V4_CONTRACT_ADDRESS is missing or invalid.",
         500,
       );
     }
@@ -161,7 +198,7 @@ export async function POST(request: Request) {
     );
 
     const client = createClient({
-      chain: studionet,
+      chain: testnetBradbury,
       account,
     });
 
@@ -324,6 +361,15 @@ export async function POST(request: Request) {
         ),
         JSON.stringify(body.answers),
       ];
+    } else if (action === "finalize_room") {
+      functionName = "finalize_room";
+      args = [
+        requiredString(
+          body.roomId,
+          "roomId",
+          12,
+        ).toUpperCase(),
+      ];
     } else {
       throw new HttpError(
         "Unsupported relay action.",
@@ -331,12 +377,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const txHash = await client.writeContract({
-      address: contractAddress as `0x${string}`,
-      functionName,
-      args,
-      value: BigInt(0),
-    });
+    const txHash = await writeWithBackpressureRetry(() =>
+      client.writeContract({
+        address: contractAddress as `0x${string}`,
+        functionName,
+        args,
+        value: BigInt(0),
+      }),
+    );
 
     return NextResponse.json({ txHash });
   } catch (error) {
@@ -356,3 +404,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

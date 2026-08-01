@@ -300,7 +300,7 @@ export default function PrivyAuthWall({
         </h1>
 
         <p className="mt-4 leading-7 text-white/50">
-          Use email, Google, Discord or an external wallet.
+          Use email, Twitter, Discord or an external wallet.
           Your login stays private and your public game profile
           remains separate.
         </p>
@@ -311,7 +311,7 @@ export default function PrivyAuthWall({
             login({
               loginMethods: [
                 "email",
-                "google",
+                "twitter",
                 "discord",
                 "wallet",
               ],
@@ -333,3 +333,5 @@ export default function PrivyAuthWall({
     </main>
   );
 }
+
+
