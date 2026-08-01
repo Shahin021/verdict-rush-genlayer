@@ -43,7 +43,7 @@ function isRetryableBackpressure(error: unknown): boolean {
 
 async function writeWithBackpressureRetry<T>(
   operation: () => Promise<T>,
-  maxAttempts = 3,
+  maxAttempts = 10,
 ): Promise<T> {
   for (
     let attempt = 1;
@@ -192,6 +192,13 @@ export async function POST(request: Request) {
       "action",
       32,
     );
+
+    if (action !== "create_game") {
+      throw new HttpError(
+        "Room actions are handled by the Redis room API.",
+        400,
+      );
+    }
 
     const account = createAccount(
       privateKey as `0x${string}`,

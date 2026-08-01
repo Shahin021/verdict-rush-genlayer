@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   useCallback,
@@ -378,6 +378,54 @@ export default function VerdictRushV2Page() {
     [],
   );
 
+  const roomAction = useCallback(
+    async (
+      action: string,
+      payload: Record<string, unknown>,
+    ): Promise<RoomState> => {
+      const accessToken =
+        await getAccessToken();
+
+      if (!accessToken) {
+        throw new Error(
+          "Your Privy session is missing or expired.",
+        );
+      }
+
+      const response = await fetch(
+        "/api/v2/room",
+        {
+          method: "POST",
+          headers: {
+            authorization:
+              `Bearer ${accessToken}`,
+            "content-type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            action,
+            ...payload,
+          }),
+        },
+      );
+
+      const data =
+        (await response.json()) as {
+          room?: RoomState;
+          error?: string;
+        };
+
+      if (!response.ok || !data.room) {
+        throw new Error(
+          data.error ||
+            "The room request failed.",
+        );
+      }
+
+      return data.room;
+    },
+    [],
+  );
   const loadRoom = useCallback(
     async (targetRoomId: string) => {
       const normalizedRoomId = targetRoomId.trim().toUpperCase();
@@ -523,11 +571,9 @@ export default function VerdictRushV2Page() {
       finalizationStartedRef.current = true;
 
       try {
-        const txHash = await relay("finalize_room", {
+        await roomAction("finalize_room", {
           roomId: targetRoom.room_id,
         });
-
-        await waitForAccepted(txHash);
         const finalizedRoom = await loadRoom(
           targetRoom.room_id,
         );
@@ -540,7 +586,7 @@ export default function VerdictRushV2Page() {
         finalizationStartedRef.current = false;
       }
     },
-    [loadRoom, relay, waitForAccepted],
+    [loadRoom, roomAction],
   );
 
   useEffect(() => {
@@ -823,16 +869,14 @@ export default function VerdictRushV2Page() {
           return;
         }
 
-        setMessage("Joining the room without a wallet...");
+        setMessage("Joining the room...");
 
-        const txHash = await relay("join_room", {
+        await roomAction("join_room", {
           roomId: normalizedRoomId,
-          playerId,
           displayName,
           accessCode: targetAccessCode.trim(),
         });
 
-        await waitForAccepted(txHash);
         nextRoom = await loadRoom(normalizedRoomId);
 
         if (nextRoom.is_private && targetAccessCode.trim()) {
@@ -897,16 +941,16 @@ export default function VerdictRushV2Page() {
 
       setMessage("Creating the multiplayer room...");
 
-      const roomTxHash = await relay("create_room", {
+      await roomAction("create_room", {
         roomId: nextRoomId,
         gameId: nextGameId,
-        playerId,
         displayName,
         roomMode,
-        accessCode: roomMode === "private" ? accessCode.trim() : "",
+        accessCode:
+          roomMode === "private"
+            ? accessCode.trim()
+            : "",
       });
-
-      await waitForAccepted(roomTxHash);
 
       setGameId(nextGameId);
       setRoomId(nextRoomId);
@@ -942,12 +986,10 @@ export default function VerdictRushV2Page() {
     try {
       setMessage("Starting the room for every player...");
 
-      const txHash = await relay("start_room", {
+      await roomAction("start_room", {
         roomId: room.room_id,
-        playerId,
       });
 
-      await waitForAccepted(txHash);
       await refreshRoom();
       beginGame();
     } catch (error) {
@@ -1001,17 +1043,14 @@ export default function VerdictRushV2Page() {
     try {
       setScreen("scoring");
       setMessage(
-        "The platform relayer is submitting your final answers...",
+        "Recording your final answers...",
       );
 
-      const txHash = await relay("submit_player", {
+      await roomAction("submit_player", {
         roomId,
-        playerId,
-        displayName,
         answers: finalAnswers,
       });
 
-      await waitForAccepted(txHash);
       const nextRoom = await refreshRoom();
 
       if (nextRoom?.status === "finished") {
