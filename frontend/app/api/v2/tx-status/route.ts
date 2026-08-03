@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "genlayer-js";
-import { testnetBradbury } from "genlayer-js/chains";
+import { studionet } from "genlayer-js/chains";
 import type { TransactionHash } from "genlayer-js/types";
 
 export const runtime = "nodejs";
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 
   try {
     const client = createClient({
-      chain: testnetBradbury,
+      chain: studionet,
     });
     const transaction = await client.getTransaction({
       hash: hash as TransactionHash,

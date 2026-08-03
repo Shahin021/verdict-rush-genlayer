@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "genlayer-js";
-import { testnetBradbury } from "genlayer-js/chains";
+import { studionet } from "genlayer-js/chains";
 import { toPublicRoom } from "../../../../lib/v5-room-model";
 import { getStoredRoom } from "../../../../lib/v5-room-store";
 
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
     }
 
     const client = createClient({
-      chain: testnetBradbury,
+      chain: studionet,
     });
 
     const address = getContractAddress();

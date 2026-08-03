@@ -8,6 +8,12 @@ import {
   useState,
 } from "react";
 import { getAccessToken, usePrivy } from "@privy-io/react-auth";
+import { createClient } from "genlayer-js";
+import { studionet } from "genlayer-js/chains";
+import {
+  TransactionHash,
+  TransactionStatus,
+} from "genlayer-js/types";
 
 type Screen =
   | "home"
@@ -297,48 +303,18 @@ export default function VerdictRushV2Page() {
 
   const waitForAccepted = useCallback(
     async (txHash: `0x${string}`) => {
-      for (let attempt = 0; attempt < 200; attempt += 1) {
-        const response = await fetch(
-          `/api/v2/tx-status?hash=${encodeURIComponent(txHash)}`,
-          {
-            cache: "no-store",
-          },
-        );
+      const readClient = createClient({
+        chain: studionet,
+      });
 
-        const data = (await response.json()) as {
-          accepted?: boolean;
-          failed?: boolean;
-          error?: string;
-        };
-
-        if (!response.ok) {
-          throw new Error(
-            data.error || "Transaction status check failed.",
-          );
-        }
-
-        if (data.failed) {
-          throw new Error(
-            data.error || "The GenLayer transaction failed.",
-          );
-        }
-
-        if (data.accepted) {
-          return;
-        }
-
-        await new Promise((resolve) =>
-          window.setTimeout(resolve, 3000),
-        );
-      }
-
-      throw new Error(
-        "The GenLayer transaction did not finish in time.",
-      );
+      await readClient.waitForTransactionReceipt({
+        hash: txHash as TransactionHash,
+        status: TransactionStatus.ACCEPTED,
+        retries: 200,
+      });
     },
     [],
   );
-
   const relay = useCallback(
     async (
       action: string,
@@ -599,10 +575,12 @@ export default function VerdictRushV2Page() {
       return;
     }
 
+    let ignore = false;
+
     const pollRoom = async () => {
       const nextRoom = await refreshRoom(false);
 
-      if (!nextRoom) {
+      if (ignore || !nextRoom) {
         return;
       }
 
@@ -626,11 +604,15 @@ export default function VerdictRushV2Page() {
     };
 
     void pollRoom();
+
     const poll = window.setInterval(() => {
       void pollRoom();
     }, 2000);
 
-    return () => window.clearInterval(poll);
+    return () => {
+      ignore = true;
+      window.clearInterval(poll);
+    };
   }, [
     beginGame,
     refreshRoom,
@@ -1098,11 +1080,35 @@ export default function VerdictRushV2Page() {
 
   function goHome() {
     window.history.replaceState({}, "", "/v2");
+
     joinAttempted.current = false;
+    submissionStartedRef.current = false;
+    finalizationStartedRef.current = false;
+    questionCountRef.current = DEFAULT_QUESTIONS.length;
+    serverOffsetMsRef.current = 0;
+    answersRef.current = [];
+
     setScreen("home");
+    setTitle("Predict the Consensus");
+    setCriterion(
+      "Rank the options by how well they solve the scenario in a fair, practical and clearly reasoned way.",
+    );
+    setSecondsPerQuestion(16);
+    setQuestions(DEFAULT_QUESTIONS);
+    setGameId("");
+    setRoomId("");
+    setRoomMode("public");
+    setAccessCode("");
     setJoinRoomId("");
     setJoinAccessCode("");
+    setRoom(null);
+    setVerdict(null);
     setMessage("");
+    setCopied(false);
+    setQuestionIndex(0);
+    setTimeLeft(16);
+    setLocked(false);
+    setSelectedChoice(null);
   }
 
   return (

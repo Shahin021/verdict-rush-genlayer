@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { PrivyClient } from "@privy-io/node";
 import { NextResponse } from "next/server";
 import { createClient } from "genlayer-js";
-import { testnetBradbury } from "genlayer-js/chains";
+import { studionet } from "genlayer-js/chains";
 import {
   scorePlayerAnswers,
   toPublicRoom,
@@ -216,7 +216,7 @@ async function readGameData(
   verdict: GameVerdict;
 }> {
   const client = createClient({
-    chain: testnetBradbury,
+    chain: studionet,
   });
 
   const address = getContractAddress();

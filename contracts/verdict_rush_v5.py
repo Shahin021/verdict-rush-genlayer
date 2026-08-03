@@ -18,8 +18,8 @@ class VerdictRushV5(gl.Contract):
     total_rooms: u256
     total_room_submissions: u256
 
-    def __init__(self, authorized_relayer: Address):
-        normalized_relayer = str(authorized_relayer).strip().lower()
+    def __init__(self, authorized_relayer: str):
+        normalized_relayer = authorized_relayer.strip().lower()
 
         if (
             len(normalized_relayer) != 42

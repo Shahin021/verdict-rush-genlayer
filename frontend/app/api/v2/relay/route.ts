@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { PrivyClient } from "@privy-io/node";
 import { NextResponse } from "next/server";
 import { createAccount, createClient } from "genlayer-js";
-import { testnetBradbury } from "genlayer-js/chains";
+import { studionet } from "genlayer-js/chains";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -205,7 +205,7 @@ export async function POST(request: Request) {
     );
 
     const client = createClient({
-      chain: testnetBradbury,
+      chain: studionet,
       account,
     });
 

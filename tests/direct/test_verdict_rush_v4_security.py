@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 
-CONTRACT_PATH = "contracts/verdict_rush_v4.py"
+CONTRACT_PATH = "contracts/verdict_rush_v5.py"
 
 
 def _address_hex(address) -> str:
