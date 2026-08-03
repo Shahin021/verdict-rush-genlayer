@@ -1,120 +1,160 @@
 # Verdict Rush
 
-**Verdict Rush** is a multiplayer **“Predict the Consensus”** game powered by GenLayer Intelligent Contracts and Optimistic Democracy.
+Verdict Rush is a multiplayer **Predict the Consensus** game powered by GenLayer Intelligent Contracts and AI consensus.
 
-Instead of asking players to find one objectively correct answer, each game contains subjective questions with four possible options. GenLayer validators rank those options according to a host-defined judging criterion, and players compete to predict the final AI consensus.
+Players do not search for one objectively correct answer. Instead, GenLayer validators rank four possible answers according to a natural language judging criterion, and players compete to predict that final consensus.
 
-## Why GenLayer
+## Live Application
 
-Traditional smart contracts can verify deterministic inputs, but they cannot reliably judge subjective questions such as:
+https://verdict-rush-genlayer.vercel.app/v2
 
-- Which proposal best balances impact and fairness?
-- Which argument would most likely persuade an AI decision-maker?
-- Which response best satisfies a natural-language criterion?
+## How It Works
 
-Verdict Rush uses a GenLayer Intelligent Contract to interpret each question, evaluate all four options, and produce a consensus ranking through Optimistic Democracy.
+1. A host signs in with Privy.
+2. The host creates a game with 3 to 12 subjective questions.
+3. Each question contains exactly four possible answers.
+4. The host defines the judging criterion and timer.
+5. The platform relayer publishes the game gaslessly on GenLayer.
+6. GenLayer validators rank all four answers.
+7. The host creates a public or private multiplayer room.
+8. Players join and answer before the room deadline.
+9. Server authoritative timing and room state are used for scoring.
+10. A final leaderboard ranks all submitted players.
 
-## Core Features
+## Production Features
 
-- Multiplayer rooms
-- Public rooms without an access code
-- Private rooms with a creator-defined access code
+- Privy authentication
+- Gasless game publishing
+- GenLayer Intelligent Contract consensus
+- Public multiplayer rooms
+- Private rooms with creator defined access codes
 - Three to twelve questions per game
-- Exactly four options per question
-- Host-defined natural-language judging criterion
-- Configurable timer from 10 to 60 seconds per question
-- GenLayer consensus ranking for every option
-- Scoring based on ranking accuracy and response speed
-- Onchain leaderboard
-- Privy authentication with email, Google, Discord, wallet, and guest access
-- Independent display names for rooms and leaderboards
-- Gasless game publishing through a server-side platform relayer
-- One final batch submission per player
+- Four answers per question
+- Configurable question timer
+- Server authoritative room timing
+- Redis backed multiplayer room state
+- Ranking accuracy and response speed scoring
+- Final multiplayer leaderboard
+- Independent player display names
+- Transaction retry handling for network backpressure
+- Stable Back to Home navigation after results
 
-## Game Flow
+## Reviewer Security Fixes
 
-1. A host signs in and selects a public or private room.
-2. The host creates a game with 3–12 subjective questions.
-3. Each question contains exactly four candidate answers.
-4. The host defines the judging criterion and question timer.
-5. The platform relayer publishes the game without requiring a wallet popup from the host.
-6. GenLayer validators rank all four options for every question.
-7. Players join with the room ID and, for private rooms, the creator-defined access code.
-8. Players answer each question before the timer expires.
-9. Answers are submitted in one final batch.
-10. The contract calculates rank points, speed bonuses, and the final leaderboard.
+All requested security changes have been implemented:
 
-## Deployed Contract
-
-**Network:** GenLayer Studio Network / Studionet
-
-**Verdict Rush V3:**
-
-```text
-0x16d3074b70a0B02Cd6E700e1403d2b5066437FE3
-```
+- Relay and room API requests require a verified Privy session.
+- Host and player identities are derived server side from the verified session.
+- Client supplied player IDs are not trusted.
+- Client timestamps cannot manipulate scoring.
+- Room authority is checked before host actions.
+- Replayed submissions are idempotent.
+- The unsafe batch scoring entry point was removed.
+- Security tests cover impersonation, room authority, timing manipulation, and replay behavior.
 
 ## Architecture
 
-### Intelligent Contract
+### GenLayer Intelligent Contract
 
-`contracts/verdict_rush_v3.py`
-
-The V3 contract handles:
-
-- Game creation and AI consensus ranking
-- Public and private room creation
-- Access-tag verification for private rooms
-- Player registration and room state
-- Match start and answer submission
-- Deterministic scoring
-- Final leaderboard generation
-
-### Frontend
-
-`frontend/app/v2/page.tsx`
-
-The frontend provides:
-
-- Entry screen for creating or joining rooms
-- Game builder
-- Public/private room controls
-- Multiplayer lobby and game flow
-- Player answer interface
-- Results and leaderboard
-
-### Authentication
-
-Privy is used for email, Google, Discord, wallet, and guest login. Authentication identity is kept separate from the public display name shown in the game.
-
-### Gasless Publishing
-
-`frontend/app/api/v2/relay/route.ts`
-
-Game and room writes can be signed by a server-side GenLayer relayer. The user does not need to connect a wallet or approve a transaction. The relayer private key remains server-only and must never use a `NEXT_PUBLIC_` environment variable.
-
-## Project Structure
+Current contract source:
 
 ```text
-contracts/
-  verdict_rush.py
-  verdict_rush_v2.py
-  verdict_rush_v3.py
-
-deploy/
-  deployScript.ts
-
-frontend/
-  app/
-    api/v2/relay/route.ts
-    v2/
-      account-menu.tsx
-      auth-wall.tsx
-      layout.tsx
-      page.tsx
-      privy-provider.tsx
-  lib/genlayer/client.ts
+contracts/verdict_rush_v5.py
 ```
+
+The Intelligent Contract handles:
+
+- Game creation
+- Natural language judging criteria
+- Validator consensus ranking
+- Game configuration
+- Consensus verdict storage
+- Authorized relayer enforcement
+- Secure submission behavior
+
+### Hybrid Multiplayer Room Layer
+
+Room state is managed through authenticated server APIs and Redis:
+
+```text
+frontend/app/api/v2/room/route.ts
+frontend/app/api/v2/state/route.ts
+frontend/lib/v5-room-model.ts
+frontend/lib/v5-room-store.ts
+frontend/lib/redis.ts
+```
+
+This layer handles:
+
+- Public and private room creation
+- Player registration
+- Host authority
+- Room start time and deadlines
+- Answer submission
+- Server authoritative scoring
+- Final room leaderboard
+- Concurrency locking and replay protection
+
+### Authentication and Gasless Relay
+
+```text
+frontend/app/api/v2/relay/route.ts
+```
+
+Privy access tokens are verified server side. The authenticated Privy user ID is used as the internal player identity.
+
+The GenLayer relayer private key remains server only and is used to publish games without requiring a wallet transaction or MetaMask popup from the host.
+
+## Deployment
+
+### Network
+
+GenLayer Studio Network / Studionet
+
+### Production Contract
+
+```text
+0xe001Be5A43081F620083f1bA6278254B238E7cc0
+```
+
+The application was also deployed and tested on Bradbury. Production was moved back to Studionet because slower transaction confirmation affected the live multiplayer experience.
+
+### Production Application
+
+https://verdict-rush-genlayer.vercel.app/v2
+
+## Verification
+
+The final production flow was successfully tested with four real accounts:
+
+- Gasless game publishing
+- Four player room participation
+- Answer submission
+- Final scoring
+- Leaderboard generation
+- Back to Home navigation
+
+Automated verification:
+
+```text
+5 security tests passed
+57 Verdict Rush project tests passed
+Production build passed
+TypeScript passed
+```
+
+## Technology
+
+- GenLayer Intelligent Contracts
+- Python
+- GenLayer JS
+- Next.js 16.2.11
+- React 19
+- TypeScript
+- Privy
+- Upstash Redis
+- Vercel
+- Viem
 
 ## Local Setup
 
@@ -122,39 +162,53 @@ frontend/
 
 - Node.js 20 or newer
 - Python 3.12 or newer
-- GenLayer CLI
-- Access to GenLayer Studionet
-- A Privy application
-- A funded GenLayer relayer account for gasless writes
+- GenLayer development tools
+- Privy application credentials
+- Upstash Redis credentials
+- Funded GenLayer relayer account
 
 ### Install Dependencies
 
-```powershell
-cd C:\Projects\verdict-rush-genlayer
-npm.cmd install
+From the project root:
 
-cd frontend
-npm.cmd install --legacy-peer-deps
+```powershell
+npm.cmd install
 ```
 
 ### Environment Variables
 
-Create `frontend/.env.local`:
+Create:
 
-```env
-NEXT_PUBLIC_PRIVY_APP_ID=<your-privy-app-id>
-NEXT_PUBLIC_VERDICT_RUSH_V3_CONTRACT_ADDRESS=0x16d3074b70a0B02Cd6E700e1403d2b5066437FE3
-VERDICT_RUSH_V3_CONTRACT_ADDRESS=0x16d3074b70a0B02Cd6E700e1403d2b5066437FE3
-GENLAYER_RELAYER_PRIVATE_KEY=<server-only-private-key>
+```text
+frontend/.env.local
 ```
 
-Never commit `.env.local` or the relayer private key.
+Required variables:
 
-### Run the Frontend
+```text
+NEXT_PUBLIC_PRIVY_APP_ID=<privy-app-id>
+PRIVY_APP_ID=<privy-app-id>
+PRIVY_APP_SECRET=<privy-app-secret>
+
+GENLAYER_RELAYER_PRIVATE_KEY=<server-only-private-key>
+
+NEXT_PUBLIC_VERDICT_RUSH_V4_CONTRACT_ADDRESS=0xe001Be5A43081F620083f1bA6278254B238E7cc0
+VERDICT_RUSH_V4_CONTRACT_ADDRESS=0xe001Be5A43081F620083f1bA6278254B238E7cc0
+
+ROOM_ACCESS_SECRET=<minimum-32-character-secret>
+
+KV_REST_API_URL=<redis-rest-url>
+KV_REST_API_TOKEN=<redis-rest-token>
+```
+
+The V4 environment variable names are retained for frontend compatibility while the current contract implementation is stored in `verdict_rush_v5.py`.
+
+Never commit `.env.local`, Privy secrets, Redis tokens, or the relayer private key.
+
+### Run Locally
 
 ```powershell
-cd C:\Projects\verdict-rush-genlayer\frontend
-npm.cmd run dev
+npm.cmd --prefix .\frontend run dev
 ```
 
 Open:
@@ -163,38 +217,56 @@ Open:
 http://localhost:3000/v2
 ```
 
-### TypeScript and Production Build
+### Production Build
 
 ```powershell
-npm.cmd run lint
-npx.cmd next build --webpack
+npm.cmd --prefix .\frontend run build
 ```
 
-### Contract Validation
+### Security Tests
 
 ```powershell
-genlayer contract lint contracts\verdict_rush_v3.py
-genlayer contract validate contracts\verdict_rush_v3.py
+python -m pytest .\tests\direct\test_verdict_rush_v4_security.py -q
 ```
 
-### Deploy the Contract
+### Verdict Rush Test Suite
+
+The old Football Bets integration example is unrelated to Verdict Rush and requires an older testing API.
 
 ```powershell
-cd C:\Projects\verdict-rush-genlayer
-npx.cmd genlayer deploy --contract contracts\verdict_rush_v3.py
+python -m pytest -q --ignore=.\tests\integration
 ```
 
-## Current Status
+## Project Structure
 
-Verdict Rush V3 is deployed on Studionet and the source code includes the complete game-builder, authentication, gasless publishing, public/private room, multiplayer submission, scoring, and leaderboard architecture.
+```text
+contracts/
+  verdict_rush_v5.py
 
-The next milestone is full public deployment and broader multiplayer testing across multiple browsers and devices.
+frontend/
+  app/
+    api/v2/
+      relay/route.ts
+      room/route.ts
+      state/route.ts
+      tx-status/route.ts
+    v2/
+      page.tsx
+      auth-wall.tsx
+      privy-provider.tsx
+  lib/
+    redis.ts
+    v5-room-model.ts
+    v5-room-store.ts
+
+tests/
+  direct/
+    test_verdict_rush_v4_security.py
+```
 
 ## Repository
 
-```text
 https://github.com/Shahin021/verdict-rush-genlayer
-```
 
 ## License
 
